@@ -1,0 +1,984 @@
+\documentclass{report}
+\usepackage[sc]{mathpazo}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{amsmath,amsfonts,amsthm,amssymb}
+\usepackage{geometry}
+\geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{2}
+\usepackage{url}
+\usepackage{indentfirst}
+
+\usepackage{color}
+\usepackage{colortbl}
+\usepackage[linktocpage=true,plainpages=false,pdfpagelabels=false]{hyperref}
+\definecolor{linkcolor}{rgb}{0.9,0,0}
+\definecolor{citecolor}{rgb}{0,0.6,0}
+\definecolor{urlcolor}{rgb}{0,0,1}
+\hypersetup{
+	colorlinks, linkcolor={linkcolor},
+	citecolor={citecolor}, urlcolor={urlcolor}
+}
+\sloppy
+\clubpenalty=10000
+\widowpenalty=10000   
+
+\renewcommand{\chaptername}{Module}
+\makeatletter
+\renewcommand{\@chapapp}{Module}
+\makeatother
+
+\begin{document}
+<<setup, include=FALSE, cache=FALSE>>=
+library(knitr)
+# set global chunk options
+opts_chunk$set(fig.path='figure/dsp-', fig.align='center', cache = T, fig.width=7, fig.height=3)
+options(formatR.arrow=TRUE,width=90)
+@
+
+\title{Digital signal processing workbook}		
+\author{Andrey Akinshin}
+\date{}
+\maketitle
+
+\tableofcontents
+\clearpage
+
+\chapter{Introduction}
+
+This document is a workbook for the ``Digital signal processing'' Coursera course (\url{https://www.coursera.org/course/dsp}). It uses the R language and the knitr package for calculation and plot rendering.
+
+Help code:
+
+<<base-functions, cache=FALSE, echo=TRUE>>=
+library("ggplot2")
+library("grid")
+library("gridExtra")
+library("phonTools")
+# Discrete signal plot
+dsplot <- function(x, y, xlab="", ylab="") {
+  d <- data.frame(x = x, y = y, y0 = rep(0, length(y)))
+  p <- ggplot() +
+    geom_segment(data=d, mapping=aes(x=x, y=y0, xend=x, yend=y), size=1, color="red") +
+    geom_point(data=d, mapping=aes(x=x, y=y), size=2, shape=21, fill="red") +
+    scale_x_continuous(name=xlab) + 
+    scale_y_continuous(name=ylab)
+  p
+}
+# Continuous signal plot
+csplot <- function(x, y, xlab="", ylab="") {
+  d <- data.frame(x = x, y = y)
+  p <- ggplot(data=d, aes(x=x, y=y)) +
+    geom_line(color="red") +
+    scale_x_continuous(name=xlab) + 
+    scale_y_continuous(name=ylab)
+  p
+}
+# dft plot
+dftplot <- function(x, xlab="", onlyhalf=F) {
+  n <- 1:length(x)
+  if (onlyhalf)
+    n <- 1:(length(x)/2)
+  X <- fft(x)
+  grid.arrange(dsplot(n, round(Re(X),4),  ylab="Re(X[n])", xlab=xlab), 
+               dsplot(n, round(Im(X),4),  ylab="Im(X[n])", xlab=xlab), ncol=2)
+  grid.arrange(dsplot(n, round(Mod(X),4), ylab="Mod(X[n])", xlab=xlab), 
+               dsplot(n, round(Arg(X),4), ylab="Arg(X[n])", xlab=xlab), ncol=2)
+}
+# Discrete-Time Fourier Transform
+dtft <- function(x) {
+  func <- function(w) {
+    sum(x * exp(-1i * w * (1:length(x))))
+  }
+  Vectorize(func)
+}
+# Discrete-Time Fourier Transform plot
+dtftplot <- function(x, xlab="", ylab="") {
+  func <- dtft(x)
+  t <- seq(-pi, pi, by=0.01)
+  value <- func(t)
+  grid.arrange(csplot(t, round(Re(value),4),  ylab="Re(X[n])",  xlab=xlab), 
+               csplot(t, round(Im(value),4),  ylab="Im(X[n])",  xlab=xlab), ncol=2)
+  grid.arrange(csplot(t, round(Mod(value),4), ylab="Mod(X[n])", xlab=xlab), 
+               csplot(t, round(Arg(value),4), ylab="Arg(X[n])", xlab=xlab), ncol=2)
+}
+@
+
+\chapter{Discrete-time (DT) signals}
+\newpage
+
+\section{Discrete-time signals}
+
+\subsection{The delta signal}
+$$ x[n] = \delta[n] $$
+<<m2.1-delta-signal, echo=TRUE>>=
+n <- -16:16
+x <- ifelse(n == 0, 1, 0)
+dsplot(n, x)	
+@
+
+\subsection{The unit step}
+$$ x[n] = 1 $$
+<<m2.1-unit-step, echo=TRUE>>=
+n <- -16:16
+x <- ifelse(n >= 0, 1, 0)
+dsplot(n, x)	
+@
+
+\subsection{The exponential decay}
+$$ x[n] = |a|^n u[n], \quad |a| < 1 $$
+<<m2.1-exponential-decay, echo=TRUE>>=
+a <- 0.5
+n <- -16:16
+x <- ifelse(n >= 0, abs(a)^n, 0)
+dsplot(n, x)	
+@
+
+\subsection{The sinusoid}
+$$ x[n] = sin(\omega_0 n + \theta) $$
+<<m2.1-sinusoid, echo=TRUE>>=
+omega0 <- pi/10; theta <- pi/2
+n <- -16:16
+x <- sin(omega0 * n + theta)
+dsplot(n, x)	
+@
+
+\subsection{Shift of a finite-length: finite-support}
+$$ \overline x[n] = x[n-z] $$
+<<m2.1-shift-finite, echo=TRUE>>=
+shift <- function(x, z) c(rep(0, z), x[1:(length(x)-z)])
+n <- 0:7
+x1 <- 1-n*0.1
+x2 <- shift(x1, 1)
+x3 <- shift(x1, 2)
+x4 <- shift(x1, 3)
+grid.arrange(dsplot(n, x1), dsplot(n, x2), ncol=2)
+grid.arrange(dsplot(n, x3), dsplot(n, x4), ncol=2)
+@
+\newpage
+
+\subsection{Shift of a finite-length: periodic extension}
+$$ \tilde x[n] = x[n-z] $$
+<<m2.1-shift-periodic, echo=TRUE>>=
+shift <- function(x, z) c(x[(length(x)-z+1):length(x)], x[1:(length(x)-z)])
+n <- 0:7
+x1 <- 1-n*0.1
+x2 <- shift(x1, 1)
+x3 <- shift(x1, 2)
+x4 <- shift(x1, 3)
+grid.arrange(dsplot(n, x1), dsplot(n, x2), ncol=2)
+grid.arrange(dsplot(n, x3), dsplot(n, x4), ncol=2)
+@
+\newpage
+
+\subsection{Energy and power}
+
+General formulas:
+
+$$ E_x = \sum_{n=-\infty}^{\infty} |x[n]|^2$$
+
+$$ P_x = \lim_{N \to \infty} \frac{1}{2N+1} $$
+
+Periodic signals:
+
+$$ E_{\tilde x} = \infty $$
+
+$$ P_{\tilde x} = \sum_{n = 0}^{N-1} |\tilde x [n]|^2 $$
+\newpage
+
+\section{The complex exponential}
+
+$$
+x[n] = 
+A e^{j(\omega n + \phi)} =
+A \big( \cos(\omega n + \phi) + j \sin(\omega n + \phi) \big)
+$$
+
+$$
+cos(\omega n + \phi) = a \cos(\omega n) + b \sin (\omega n), \quad a = \cos \phi, \; b = \sin \phi
+$$
+
+$$
+Re \{ e^{j(\omega n + \phi)} \} = Re \{ e^{j \omega n} e^{j\phi} \}
+$$
+
+$$
+e^{j\alpha} = \cos \alpha + j \sin \alpha
+$$
+
+$$
+\textrm{Rotation:} \quad z' = z e^{j \alpha}
+$$
+
+$$
+\textrm{Signal:} \quad x[n] = e^{j \omega n}; \quad x[n + 1] = e^{j\omega} x[n]
+$$
+
+$$
+\textrm{Signal:} \quad x[n] = e^{j \omega n + \phi}; \quad x[n + 1] = e^{j\omega} x[n], \quad x[0] = e^{j \phi}
+$$
+
+$$
+e^{j\omega n} \; \textrm{peridoic} \Leftrightarrow \omega = \frac{M}{N} 2 \pi, \; M,N \in \mathbb{N}
+$$
+
+$$
+e^{j \omega} = e^j(\omega + 2 k \pi), \forall k \in \mathbb{N}
+$$
+
+\newpage
+
+\section{The Karplus-Strong Algorithm}
+
+Main equation:
+
+$$ y[n] = \alpha y[n - M] + x[n] $$
+
+<<m2.3-karplus-strong, echo=TRUE>>=
+ks <- function(x, M, alpha, N) {
+  y <- c()
+  for (n in 1:N) {
+    yn <- alpha * ifelse(n > M, y[n-M], 0) + 
+          ifelse(n <= length(x), x[n], 0)
+    y <- c(y, yn)
+  }
+  y
+}
+@
+
+\subsection{Sine wave}
+
+$M = 100, \alpha = 1, \overline x[n] = \sin (2\pi n /100)$ for $0 \leq n < 100$ and zero elsewhere
+
+<<m2.3-sin-wave, echo=TRUE>>=
+M <- 100; alpha <- 1; n <- 0:99
+x <- sin(2*pi*n/100)
+y <- ks(x, M, alpha, 1000)
+grid.arrange(dsplot(n, x), csplot(1:length(y), y), ncol=2)
+@
+
+\subsection{Proto-violin}
+
+$M = 100, \alpha = 0.95, \overline x[n]: $ zero-mean sawtooth wave between 0 and 99, zero elsewhere
+
+<<m2.3-proto-violin, echo=TRUE>>=
+M <- 100; alpha <- 0.95; n <- 0:99
+x <- -1 + 2*n/100
+y <- ks(x, M, alpha, 1000)
+grid.arrange(dsplot(n, x), csplot(1:length(y), y), ncol=2)
+@
+
+\subsection{Random}
+
+$M = 100, \alpha = 0.9, \overline x[n]: $ 100 random values between 0 and 99, zero elsewhere
+
+<<m2.3-random, echo=TRUE>>=
+M <- 100; alpha <- 0.9; n <- 0:99
+x <- runif(100, -1, 1)
+y <- ks(x, M, alpha, 1000)
+grid.arrange(dsplot(n, x), csplot(1:length(y), y), ncol=2)
+@
+
+\newpage
+
+\chapter{Euclid and Hilbert}
+
+\section{From Euclid to Hilbert}
+
+\subsection{Space of square-integrable functions over $[-1,1]: l_2([-1,1])$}
+
+<<m3.1-vectors-as-general-objects, echo=TRUE>>=
+t <- seq(-1, 1, by=0.01)
+f1 <- 2*pi; x1 <- sin(f1 * t)
+f2 <- 5*pi; x2 <- sin(f2 * t)
+grid.arrange(csplot(t, x1), csplot(t, x2), ncol=2)
+@
+
+$$ x^{(1)} = \sin(f_1 t), \quad f_1 = 2\pi $$
+
+$$ x^{(2)} = \sin(f_2 t), \quad f_2 = 5\pi $$
+
+$$ \big< x^{(1)}, x^{(2)} \big> = \int_{-1}^{1} \sin (f_1 t) \sin(f_2 t) dt $$
+
+$x^{(1)} \bot x^{)(2)}$ if $f_1 \neq f_2$ and $f_1, f_2$ integer multiples of a fundamental (harmonically related)
+
+$$ \sin(f_1 t) \sin(f_2 t), \quad f_1 = 2\pi, \; f_2 = 5\pi $$
+
+<<m3.1-orthogonality-in-a-functional-vector-space, echo=TRUE>>=
+csplot(t, x1*x2)
+round(integrate(function(x) sin(f1*x)*sin(f2*x), lower=-1, upper=1)$value, 10)
+@
+
+\subsection{Interesting question when the space has $\infty$ dimensions}
+
+$$ \sun_{k=0}^{N} x^{(2k+1)}, \quad x^{(n)} = \sin(\pi n t)/n, t \in [-1, 1] $$
+
+<<m3.1-infty-space, echo=TRUE>>=
+inftySpace <- function(N) {
+  t <- seq(-1, 1, by=0.001)
+  x <- rep(0, length(t))
+  for (k in 0:N) {
+    n <- 2 * k + 1
+    x <- x + sin(pi*n*t)/n
+  }
+  csplot(t, x)
+}
+inftySpace(0)
+inftySpace(1)
+inftySpace(2)
+inftySpace(10)
+inftySpace(50)
+inftySpace(150)
+@
+
+\newpage
+
+\section{Hilbert Space, properties and bases}
+
+\subsection{Formal properties of a vector space}
+
+For $x, y, z \in V$ and $\alpha, \beta \in \mathbb{C}$:
+
+\begin{itemize}
+  \item $x + y = y + x$
+  \item $(x + y) + z = x + (y + z)$
+  \item $\alpha (x + y) = \alph x + \alpha y$
+  \item $(\alpha + \beta)x = \alpha x + \beta x$
+  \item $\alpha(\beta x) = (\alpha \beta) x$
+  \item $\exists 0 \in V \quad | \quad x + 0 = 0 + x = x$
+  \item $\forall x \in V \; \exists(-x) \quad | \quad x + (-x) = 0$
+\end{itemize}
+
+\subsection{Formal properties of the inner product}
+
+For $x, y, z \in V$ and $\alpha \in \mathbb{C}$:
+
+\begin{itemize}
+  \item $\langle x + y, z \rangle = \langle x,z \rangle + \langle y,z \rangle$
+  \item $\langle x, y \rangle = \langle y,x \rangle^*$
+  \item $\langle \alpha x, y \rangle = \alpha^* \langle x,y \rangle$
+  \item $\langle x, \alpha y \rangle = \alpha \langle x, y \rangle$
+  \item $\langle x, x \rangle \geq 0$
+  \item $\langle x, x \rangle = 0 \Leftrightarrow x = 0$
+  \item if $\langle x, y \rangle = 0$ and $x, y \neq 0$ then $x$ and $y$ are called orthogonal
+\end{itemize}
+
+\subsection{Inner product for signals}
+
+$$ \langle x, y \rangle = \sum_{n=0}^{N-1} x^*[n]y[n]$$
+
+$$ \langle x, y \rangle = \sum_{n=-\infty}^{\infty} x^*[n]y[n]$$
+
+We require sequences to be \textit{square-summable}: $\sum |x[n]|^2 < \infty$.
+
+Space of square-summable sequences: $l_2(\mathbb{Z})$.
+
+\subsection{Special bases}
+
+Orthogonal basis: $ \langle w^(k), w^{(n)} \rangle = 0 $ for $k \neq n$.
+
+Orthonormal basis: $ \langle w^(k), w^{(n)} \rangle = \sigma[n-k] $.
+
+\newpage
+
+\section{Hilbert Space and approximation}
+
+\subsection{Parseval's Theorem}
+
+$$ x = \sum_{k=0}^{K-1} \alpha_k w^{(k)} $$
+
+For an orthonormal basis:
+
+$$
+ || x ||^2 = \sum_{k=0}^{K-1} |\alpha_k|^2
+$$
+
+\subsection{Gram-Schmidt algorithm}
+
+The Gram-Schmidt algorithm leads to an orthonormal basis for $P_N([-1,1])$:
+
+$$
+\begin{array}{c}
+  u^{(0)} = \sqrt{1/2} \\
+  u^{(1)} = \sqrt{3/2}t \\
+  u^{(2)} = \sqrt{5/8} (3t^2-1) \\
+  u^{(3)} = \ldots
+\end{array}
+$$
+
+$$
+  \alpha_k = \langle u^{(k)}, x \rangle
+$$
+
+\chapter{Fourier Analysis}
+
+\section{Exploration via a change of basis}
+
+\subsection{The Fourier Basis for $\mathbb{C}^N$}
+
+In vector notation:
+
+$$ \{ w^{(k)}_{k=0,1,\ldots,N-1} \} $$
+
+with
+
+$$ w_n^{k} = e^{j \frac{2\pi}{N} nk} $$
+
+is an orthogonal basis in $\mathbb{C}^N$.
+
+<<m4.1-basis-vectors, echo=TRUE>>=
+N <- 64
+plotW <- function(k) {
+  n <- 0:(N-1)
+  w <- exp(1i * 2*pi/N * n * k)
+  grid.arrange(dsplot(n, Re(w), xlab=paste0("k=", k), ylab="Re"), 
+               dsplot(n, round(Im(w),5), xlab=paste0("k=", k), ylab="Im"), ncol=2)
+}
+for (k in c(0,1,2,3,4,5,16,20,30,31,32,33,60,62,63))
+  plotW(k)
+@
+
+\section{The Discrete Fourier Transform}
+
+Analysis formula:
+
+$$
+  X[k] = sum_{n=0}^{N=1} x[n] e^{-j\frac{2\pi}{N}nk}, \quad k = 0,1,\ldots,N-1
+$$
+
+N-point signal in the \textit{frequency domain}.
+
+Synthesis formula:
+
+$$
+  x[n] = \frac{1}{N} sum_{k=0}^{N-1} X[k] e^{j\frac{2\pi}{N}nk}, \quad n = 0,1,\ldots,N-1
+$$
+
+N-point signal in the \textit{``time'' domain}.
+
+DFT is obviously linear:
+
+$$
+  DFT \{ \alpha x[n] + \beta y[n] \} = \alpha DFT \{ x[n] \} + \beta DFT \{ y[n] \}
+$$
+
+\subsection{DFT of the delta signal}
+
+$$
+  DFT of x[n] = \sigma[n], \quad x[n] \in \mathbb{C}^N
+$$
+
+$$
+  X[k] = 1
+$$
+
+<<m4.2-delta-signal, echo=TRUE>>=
+n <- 0:15
+x <- c(1, rep(0,15))
+X <- fft(x)
+grid.arrange(dsplot(n, x, ylab="x[n]"), dsplot(n, Re(X), ylab="X[n]"), ncol=2)
+@
+
+\subsection{DFT of the uniform signal}
+
+$$
+DFT of x[n] = 1, \quad x[n] \in \mathbb{C}^N
+$$
+
+$$
+X[k] = N \sigma[k]
+$$
+
+<<m4.2-uniform-signal, echo=TRUE>>=
+n <- 0:15
+x <- rep(1, 16)
+X <- fft(x)
+grid.arrange(dsplot(n, x, ylab="x[n]"), dsplot(n, Re(X), ylab="X[n]"), ncol=2)
+@
+
+\subsection{DFT of the cos signal}
+
+$$
+DFT of x[n] = 3\cos(2\pi/16 n), \quad x[n] \in \mathbb{C}^64
+$$
+
+$$
+X[k] = \left\{
+  \begin{array}{ll}
+     96 & \textrm{for} k = 4, 60 \\
+     0 & otherwise
+  \end{array}
+\right.
+$$
+
+<<m4.2-cos-signal, echo=TRUE>>=
+n <- 0:63
+x <- 3 * cos(2*pi/16*n)
+X <- fft(x)
+grid.arrange(dsplot(n, Re(X), ylab="Re(X[n])"), 
+             dsplot(n, round(Im(X),4), ylab="Im(X[n])"), ncol=2)
+@
+
+$$
+DFT of x[n] = 3\cos(2\pi/16 n + \pi/3), \quad x[n] \in \mathbb{C}^64
+$$
+
+$$
+X[k] = \left\{
+  \begin{array}{ll}
+    96 e^{j \frac{\pi}{3}} & \textrm{for} k = 4 \\
+    96 e^{-j \frac{\pi}{3}} & \textrm{for} k = 60 \\
+    0 & otherwise
+  \end{array}
+\right.
+$$
+
+<<m4.2-cos-signal2, echo=TRUE>>=
+n <- 0:63
+x <- 3 * cos(2*pi/16*n + pi/3)
+X <- fft(x)
+grid.arrange(dsplot(n, Re(X), ylab="Re(X[n])"), 
+             dsplot(n, round(Im(X),4), ylab="Im(X[n])"), ncol=2)
+@
+
+$$
+DFT of x[n] = 3\cos(2\pi/10 n), \quad x[n] \in \mathbb{C}^64
+$$
+
+<<m4.2-cos-signal3, echo=TRUE>>=
+n <- 0:63
+x <- 3 * cos(2*pi/10*n)
+X <- fft(x)
+grid.arrange(dsplot(n, Mod(X), ylab="Mod(X[n])"), 
+             dsplot(n, Arg(X), ylab="Arg(X[n])"), ncol=2)
+@
+
+\subsection{DFT of length-M step in $\mathbb{C}^N$}
+
+$$
+  x[n] = \sum_{h=0}^{M-1} \sigma[n-h], \quad n = 0, 1, \ldots, N-1
+$$
+
+$$
+  X[k] = \dfrac{\sin(\frac{\pi}{N} Mk)}{\sin(\frac{\pi}{N}k)} e^{-j\frac{pi}{N}(M-1)k}
+$$
+
+<<m4.2-step, echo=TRUE>>=
+plotStep <- function(M) {
+  n <- 0:63
+  x <- c(rep(1, M), rep(0, 64-M))
+  X <- fft(x)
+  grid.arrange(dsplot(n, Mod(X), ylab="Mod(X[n])", xlab="M=4"), 
+               dsplot(n, Arg(X), ylab="Arg(X[n])", xlab="M=4"), ncol=2)
+}
+plotStep(4)
+@
+
+\section{The DFT in practice}
+
+\subsection{Average Monthly Temperatures at Nottingham, 1920-1939}
+
+<<m4.3-nottingham, echo=TRUE>>=
+x <- as.integer(nottem)
+n <- 1:length(x)
+X <- fft(x) / length(x)
+csplot(n, x, ylab="x (Temperature)")
+grid.arrange(dsplot(n, Re(X), ylab="Re(X[n])"), 
+             dsplot(n, Im(X), ylab="Im(X[n])"), ncol=2)
+MainPeak = which.max(abs(Re(X[-1])))
+cat("Average value:", Re(X[1]))
+cat("DFT main peak for k = ", MainPeak, ", value = ", abs(Re(X[MainPeak+1])))
+cat("Month count:", length(n))
+cat("Frequency: ", length(n) , "/", MainPeak, "=", length(n)/MainPeak, "months")
+cat("Temperature excursion: ", Re(X[1]), "+-", 2 * abs(Re(X[MainPeak+1])))
+@
+
+\section{DFT, DFS, DTFT}
+
+\subsection{Discrete-Time Fourier Transform (DTFT)}
+
+Formal definition:
+
+\begin{itemize}
+  \item $x[n] \in l_2(\mathbb{Z})$
+  \item define the \textit{function} of $\omega \in \mathbb{R}$
+  $$ F(\omega) = \sum_{n=-\infty}^{\infty} x[n] e^{-j \omega n} $$
+  \item inversion (when $F(\omega)$ exists):
+  $$ x[n] = \frac{1}{2\pi} \int_{-pi}^{pi} F(\omega) e^{j \omega n} d\omega$$
+  \item F(\omega) is $2\pi$-periodic
+  \item to stress periodicity (and for other reasons) we will write
+  $$ X(e^{j\omega}) = \sum_{n=-\infty}^{\infty} x[n] e^{-j \omega n} $$
+  \item by convention, $X(e^{j \omega})$ is represented over $[-pi; pi]$
+\end{itemize}
+
+<<m4.4-decay, echo=TRUE>>=
+alpha <- 0.9; n <- 0:40
+x <- alpha^n
+dsplot(n, x)
+dtftplot(x)
+@
+\newpage
+
+\section{DTFT: intuition and properties}
+
+\subsection{DTFT properties}
+\begin{itemize}
+  \item Linearity
+    $$ DTFT \{ \alpha x[n] + \beta y[n] \} = \alpha X(e^{j\omega}) + \beta Y(e^{j\omega})$$
+  \item Time shift
+    $$ DTFT \{ x[n-M] \} = e^{-j\omega M} X(e^{j\omega}) $$
+  \item Modulation (dual)
+    $$ DTFT \{ e^{j \omega_0 n} x[n] \} = X(e^{j(\omega-\omega_0)}) $$
+  \item Time reversal
+    $$ DTFT \{ x[-n] \} = X(e^{-j\omega}) $$
+  \item Conjugation
+    $$ DTFT \{ x^*[n] \} = X^*(e^{-j\omega})$$
+\end{itemize}
+
+\subsection{Some particular cases}
+\begin{itemize}
+  \item if $x[n]$ is symmetric, the DTFT is symmetric:
+    $$ x[n] = x[-n] \Leftrightarrow X(e^{j\omega}) = X(e^{-j\omega}) $$
+  \item if $x[n]$ is real, the DTFT is Hermitian-symmetric:
+    $$ x[n] = x^*[n] \Leftrightarrow X(e^{j\omega}) = X^*(e^{-j\omega})$$
+  \item special case: if $x[n]$ is real, the magnitude of the DTFT is symmetric:
+    $$ x[n] \in \mathbb{R} \Rightarrow |X(e^{j\omega})| = |X(e^{-j\omega})| $$
+  \item more special case: if $x[n]$ is real and symmetric, $X(e^{j\omega})$ is also real and symmetric
+\end{itemize}
+
+\subsection{DTFT as basic expansion}
+
+\begin{itemize}
+  \item $ DFT \{ \delta[n] \} = 1 $
+  \item $ DTFT \{ \delta[n] \} = 1 $
+  \item $ DFT \{ 1 \} = N \delta[k] $
+  \item $ DTFT \{ 1 \} = \tilde \delta(\omega) $
+  \item $ DTFT \{ e^{j\omega_0 n} \} = \tilde \delta (\omega - \omega_0) $
+  \item $ DTFT \{ \cos(\omega_0 n) \} = \Big( \tilde \delta (\omega - \omega_0) + \tilde \delta (\omega + \omega_0) \Big) / 2 $
+  \item $ DTFT \{ \sin(\omega_0 n) \} = -j \Big( \tilde \delta (\omega - \omega_0) - \tilde \delta (\omega + \omega_0) \Big) / 2 $
+\end{itemize}
+
+\newpage
+
+\section{Relationship between transforms}
+
+\subsection{DTFT of periodic signals}
+
+$$
+  \tilde X(e^{j\omega}) = \frac{1}{N} \sum_{k=0}^{N-1} X[k] \tilde\delta(\omega - \frac{2\pi}{N} k)
+$$
+
+\subsection{32-tap sawtooth}
+
+<<m4.6-sawtooth, echo=TRUE>>=
+n <- 0:31
+x <- -1 + 2*n/31
+dsplot(n, x)
+dftplot(x)
+dtftplot(x)
+@
+
+\subsection{Interval indicator signal}
+
+<<m4.6-indicator, echo=TRUE>>=
+N <- 9
+n <- 0:(N-1)
+x <- rep(1, N)
+dsplot(n, x)
+dtftplot(x)
+@
+
+
+\section{Sinusoidal modulation}
+
+\subsection{Classifying signals in frequency}
+
+Three broad categories according to where most of the spectral energy resides:
+
+\begin{itemize}
+  \item lowpass signals (also known as ``baseband'' signals)
+  \item highpass signals
+  \item bandpass signals
+\end{itemize}
+
+\subsection{Sinusoidal modulation}
+
+$$
+  DTFT \{ x[n] \cos(\omega_c n) \} = 
+  DTFT \Big\{ \frac{1}{2}e^{j \omega_c n}x[n] + \frac{1}{2} e^{-j\omega_c n} x[n] \Big\} =
+  \frac{1}{2} \Big( X(e^{j(\omega-\omega_c)}) + X(e^{j(\omega+\omega_c))} \Big)
+$$
+
+\begin{itemize}
+  \item usually $x[n]$ baseband
+  \item $\omega_c$ is the \textit{carrier} frequency
+\end{itemize}
+
+Applications:
+
+\begin{itemize}
+  \item voice and music are lowpass signals
+  \item radio channels are bandpass, in much higher frequencies
+  \item modulation brings the baseband signal in the transmission band
+  \item demodulation at the receiver brings it back
+\end{itemize}
+
+Demodulation in the frequency domain:
+
+\begin{itemize}
+  \item we recovered the baseband signal exactly...
+  \item but we have some spurious high-frequency components
+  \item in the next Module we will learn how to get rid of them!
+\end{itemize}
+
+\subsection{Tuning a guitar}
+
+Problem (abstraction):
+\begin{itemize}
+  \item reference sinusoid at frequency $\omega_0$
+  \item tunable sinusoid of frequency $\omega$
+  \item make $\omega = \omega_0$ ``by ear''
+\end{itemize}
+
+The procedure:
+
+\begin{enumerate}
+  \item bring $\omega$ close to $\omega_0$ (easy)
+  \item when $\omega \approx \omega_0$ play both sinusoid together
+  \item trigonometry comes to the rescue:
+    $$
+      x[n] =
+      cos(\omega_0 n) + cos(\omega n) =
+      2 \cos(\frac{\omega_0+\omega}{2}n) \cos(\frac{\omega_0-\omega}{2}n) \approx
+      2 \cos(\Delta_\omega n) \cos(\omega_0 n)
+    $$
+\end{enumerate}
+
+Let's see what's happening:
+
+$$ x[n] \approx 2 \cos(\Delta_\omega n) \cos(\omega_0 n) $$
+
+\begin{itemize}
+  \item ``error'' signal: $ 2 \cos(\Delta_\omega n) $
+  \item modulation at $\omega_0$: $ \cos(\omega_0 n) $
+  \item when $\omega \approx \omega_0$, the error signal is too low to be heard; modulation brings it up to hearing range and we perceive it as amplitude oscillations of the carrier frequency
+\end{itemize}
+
+Examples in the time domain :
+
+$$
+  \omega_0 = 2\pi \cdot 0.2,
+  \omega = 2\pi \cdot 0.22
+  \Delta_\omega = 2\pi \cdot 0.0100
+$$
+
+<<m4.7-tuning1, echo=TRUE>>=
+omega0 <- 2*pi*0.2
+omega <- 2*pi*0.22
+t <- seq(0, 400, by=0.1)
+x <- cos(omega0*t) + cos(omega*t)
+csplot(t, x)
+@
+
+$$
+\omega_0 = 2\pi \cdot 0.2,
+\omega = 2\pi \cdot 0.21
+\Delta_\omega = 2\pi \cdot 0.0050
+$$
+
+<<m4.7-tuning2, echo=TRUE>>=
+omega0 <- 2*pi*0.2
+omega <- 2*pi*0.21
+t <- seq(0, 400, by=0.1)
+x <- cos(omega0*t) + cos(omega*t)
+csplot(t, x)
+@
+
+$$
+\omega_0 = 2\pi \cdot 0.2,
+\omega = 2\pi \cdot 0.205
+\Delta_\omega = 2\pi \cdot 0.0025
+$$
+
+<<m4.7-tuning3, echo=TRUE>>=
+omega0 <- 2*pi*0.2
+omega <- 2*pi*0.205
+t <- seq(0, 400, by=0.1)
+x <- cos(omega0*t) + cos(omega*t)
+csplot(t, x)
+@
+
+$$
+\omega_0 = 2\pi \cdot 0.2,
+\omega = 2\pi \cdot 0.201
+\Delta_\omega = 2\pi \cdot 0.0005
+$$
+
+<<m4.7-tuning4, echo=TRUE>>=
+omega0 <- 2*pi*0.2
+omega <- 2*pi*0.201
+t <- seq(0, 400, by=0.1)
+x <- cos(omega0*t) + cos(omega*t)
+csplot(t, x)
+@
+
+\section{The Short-Time Fourier Transform}
+
+Dual-Tone Multi Frequency (DTMF) dialing:
+
+<<m4.8-dtmf-freq, echo=TRUE>>=
+f123 <- 697
+f456 <- 770
+f789 <- 852
+fs0s <- 941
+f147s <- 1209
+f2580 <- 1336
+f369s <- 1477
+@
+
+\subsection{Example: 1-5-9}
+
+<<m4.8-dtmf-159, echo=TRUE>>=
+step <- 0.1
+t1 <- seq(0, 200, by=step)
+t2 <- seq(0, 50, by=step)
+x <- c(
+  cos(t1 * f123) + cos(t1 * f147s), # 1
+  t2 * 0,
+  cos(t1 * f456) + cos(t1 * f2580), # 5
+  t2 * 0,
+  cos(t1 * f789) + cos(t1 * f369s), # 9
+  t2 * 0)
+N <- length(x)
+t <- (1:N)*step
+csplot(t, x)
+X <- fft(x)
+csplot(t[1:(N/2)], Mod(X)[1:(N/2)])
+@
+
+\subsection{Short-Time Fourier Transform}
+
+Idea:
+
+\begin{itemize}
+  \item take small signal pieces of length L
+  \item look at the DFT of each piece:
+    $$ X[m; k] = \sum_{n=0}^{L-1} x[m+n] e^{-j\frac{2\pi}{L}nk} $$
+\end{itemize}
+
+<<m4.8-dtmf-stff, echo=TRUE>>=
+count <- 6
+L <- N / count
+for (i in 1:count) {
+  subt <- (L*(i - 1)+1):(L*i)
+  X <- fft(x[subt])
+  print(csplot(subt[1:(L/2)], Mod(X)[1:(L/2)]))
+}
+@
+
+\subsection{Spectrogram}
+
+Idea:
+
+\begin{itemize}
+  \item color-code the magnitude: dark is small, white is large
+  \item use $10 \log_{10}(|X[m;k]|)$ to see better (pwer id dBs)
+  \item plot spectral slices one after another
+\end{itemize}
+
+<<m4.8-dtmf-spectrogram, echo=TRUE>>=
+spectrogram(x, fs=800, windowlength=N/60)
+spectrogram(x, fs=800, windowlength=N/12)
+@
+
+\newpage
+
+\section{FFT: history and algorithm}
+
+\subsection{History}
+
+\begin{itemize}
+  \item Gauss computes trigonometric series efficiently in 1805
+  \item Fourier invents Fourier series in 1807
+  \item People start computing Fourier series, and develop tricks
+  \item Good comes up with an algorithm in 1958
+  \item Cooley and Tukey (re)-discover the fast Fourier transform algorithm in 1965 for N a power of a prime
+  \item Winograd comines all methods to give the most efficient FFTs
+\end{itemize}
+
+\subsection{The DFT matrix}
+
+\begin{itemize}
+  \item $W_N = e^{-j\frac{2\pi}{N}}$ (or simply $W$ when $N$ is clear from the context)
+  \item power of N can be taken modulo N, since $W^N = 1$.
+  \item DFT Matrix of size $N$ by $N$:
+  $$
+    W = \begin{bmatrix}
+     1 & 1 & 1 & 1 & \ldots & 1 \\
+     1 & W^1 & W^2 & W^3 & \ldots & W^{N-1} \\
+     1 & W^2 & W^4 & W^6 & \ldots & W^{2(N-1)} \\
+     \vdots & \vdots & \vdots & \vdots & \ddots & \vdots \\
+     1 & W^{N-1} & W^{2(N-1)} & W^{3(N-1)} & \ldots & W^{(N-1)^2}
+    \end{bmatrix}
+  $$
+\end{itemize}
+
+\subsection{Divide and Conquer for DFT --- One step}
+
+Recall: computing $X = W_n x has complexity O(N^2)$
+
+Idea:
+
+\begin{itemize}
+  \item Take a problem of size N where N is a power of 2.
+  \item Cut into two problems of size N/2 that use complexity $N^4/4$ each
+  \item There might be some complexity to recover the full solution, say $N$.
+  \item The divide-and-conquer solution has complexity $N^2/2+N$ for one step
+  \item For $N \geq 4$ this is much better then $N^2$!
+\end{itemize}
+
+\subsection{Divide and Conquer for DFT --- Multiple steps}
+
+Divide and conquer can be reapplied
+
+\begin{itemize}
+  \item If it worked once, it will work again (recall, $N=2^K$)
+  \item the two problems of size $N/2$ into 4 problems of size $N/4$
+  \item There might be some complexity to recover the full solution, say $N$ at each step
+  \item You can do this $\log_2 (N-1)=K-1$ times, until problem of size 2 is obtained
+  \item This requires order N complexity each time
+  \item The divide-and-conquer solution has therefor complexity of order $N \log_2 N$
+  \item For $N \geq 4$ this is much better then $N^2$!
+\end{itemize}
+
+\subsection{Conclusion}
+
+Don't worry, be happy!
+
+\begin{itemize}
+  \item The Cooley-Tukey is the most popular algorithm, mostly for $N=2^N$
+  \item Note that there is always a good FFT algorithm around the corner
+  \item Do not zero-pad to lengthen a vector to have a size equal to a power of 2
+  \item There are good packages out there (e.g. Fastest Fourier Transform in the West, SPIRAL)
+  \item It does make a BIG difference!
+\end{itemize}
+
+\section{Why the DFT is useful: A few examples}
+
+\subsection{Overview}
+
+\begin{itemize}
+  \item Analysis of musical instruments
+  \item Approximation of periodical phenomena: the case of tides in Venice
+  \item The secret of MP3 compression
+  \item Magnetic Resonance Imaging
+\end{itemize}
+
+\appendix
+\renewcommand{\chaptername}{Appendix}
+\makeatletter
+\renewcommand{\@chapapp}{Appendix}
+\makeatother
+
+\end{document}
