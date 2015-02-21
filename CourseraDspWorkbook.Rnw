@@ -975,6 +975,413 @@ Don't worry, be happy!
   \item Magnetic Resonance Imaging
 \end{itemize}
 
+\newpage
+
+\chapter{Linear Filters}
+
+\section{Linear filters}
+
+\subsection{A generic signal processing device}
+
+The input signal: $x[n]$, the output signal: $y[n]$.
+
+The device scheme:
+
+$$
+  x[n] \quad \longmapsto \quad \boxed{\mathcal{H}} \quad \longmapsto \quad y[n]
+$$
+
+The equation:
+
+$$
+  y[n] = \mathcal{H} \{ x[n] \}
+$$
+
+\subsection{Linearity}
+
+$$
+  \mathcal{H} \{ \alpha x_1[n] + \beta x_2[n] \} =
+  \alpha \mathcal{H} \{ x_1[n] \} +
+  \beta \mathcal{H} \{ x_2[n] \}
+$$
+
+\subsection{Time invariance}
+
+$$
+  y[n] = \mathcal{H} \{ x[n] \}
+  \quad \Longleftrightarrow \quad 
+  \mathcal{H} \{ x[n-n_0] \} = y[n-n_0]
+$$
+
+\subsection{Linear, time-invariant (LTI) systems}
+
+$$
+  y[n] = H(x[n], x[n-1], x[n-2], \ldots, y[n-1], y[n-2], \ldots)
+$$
+
+with $H(\cdot)$ a linear function of its arguments
+
+\subsection{Impulse response}
+
+$$
+  h[n] = \mathcal{H} \{ \delta[n] \}
+$$
+
+Fundamental results: impulse response fully characterizes the LTI system!
+
+\textbf{An example}
+
+$$
+h[n] = \alpha^n u[n]
+$$
+
+<<m5.1-lti-example1, echo=TRUE>>=
+alpha <- 0.8
+n <- -3:15
+h <- c(0, 0, 0, alpha^(0:15))
+dsplot(n, h, xlab="n", ylab="h[n]")
+@
+
+$$
+x[n] = \begin{cases}
+2 & n=0 \\
+3 & n=1 \\
+1 & n=2 \\
+0 & otherwise
+\end{cases}
+$$
+
+<<m5.1-lti-example2, echo=TRUE>>=
+n <- -2:5
+x <- c(0, 0, 2, 3, 1, 0, 0, 0)
+dsplot(n, x, xlab="n", ylab="x[n]")
+@
+
+\begin{itemize}
+  \item $x[n] = 2 \delta[n] + 3 \delta[n-1] + \delta[n-2]$
+  \item we know the impulse response $h[n] = \mathcal{H} \{ \delta[n] \}$
+  \item compute $y[n] = \mathcal{H} \{ x[n] \}$ exploiting linearity and time-invariance
+\end{itemize}
+
+$$
+  \begin{array}{rl}
+    y[n] = & \mathcal{H} \{ 2 \delta[n] + 3 \delta[n-1] + \delta[n-2] \} \\
+         = & 2 \mathcal{H} \{ \delta[n] \} +
+             3 \mathcal{H} \{ \delta[n-1] \} +
+               \mathcal{H} \{ \delta[n-2] \} = \\
+         = & 2h[n] + 3h[n-1] + h[n-2]
+  \end{array}
+$$
+
+<<m5.1-lti-example3, echo=TRUE>>=
+n <- -5:25
+h <- c(0, 0, 0, 0, 0, alpha^(0:25))
+shift <- function(s, z) c(rep(0, z), s[1:(length(s)-z)])
+dsplot(n, 2*h, xlab="n", ylab="2h[n]")
+dsplot(n, 3*shift(h,1), xlab="n", ylab="3h[n-1]")
+dsplot(n, shift(h,2), xlab="n", ylab="h[n-2]")
+y <- 2 * h + 3 * shift(h,1) + shift(h,2)
+dsplot(n, y, xlab="n", ylab="y[n]")
+@
+
+\subsection{Convolution}
+
+We can always write (remember Module 3.2):
+
+$$
+  x[n] = \sum_{k=-\infty}^{\infty} x[k] \delta[n-k]
+$$
+
+by linearity and time invariance:
+
+$$
+  y[n] = \sum_{k=-\infty}^{\infty} x[k] h[n-k] = x[n] \cdot h[n]
+$$
+
+\textbf{Performing the convolution algorithmically}
+
+$$
+  x[n] * h[n] = \sum_{k=-\infty}^{\infty} x[k] h[n-k]
+$$
+
+Ingredients:
+\begin{itemize}
+  \item a sequence $x[m]$
+  \item a second sequence $h[m]$
+\end{itemize}
+
+The recipe:
+\begin{itemize}
+  \item time-reverse $h[m]$
+  \item at each step $n$n (from $-\infty$ to $\infty$):
+    \begin{itemize}
+      \item center the time-reversed $h[m]$ in n (i.e. shift by $-n$)
+      \item compute the inner product
+    \end{itemize}
+\end{itemize}
+
+\subsection{Convolution properties}
+
+\begin{itemize}
+  \item linearity and time invariance (by definition)
+  \item commutativity: $(x*h)[n] = (h*x)[n]$
+  \item associativity for absolutely- and square-summable sequences: $((x*h)*w)[n]=(x*(h*w))[n]$
+\end{itemize}
+
+\section{Filtering by example}
+
+\subsection{Donoising my Moving Average}
+\begin{itemize}
+  \item idea: replace each sample by the local average
+  \item for instance: $y[n] = (x[n] + x[n-1])/2$
+  \item more generally:
+  $$
+    y[n] = \frac{1}{M} \sum_{k=0}^{M-1} x[n-k]
+  $$
+\end{itemize}
+
+\subsection{MA: impulse response}
+
+$$
+  h[n] = \frac{1}{M} \sum_{k=0}^{M-1} \delta[n-k] = \begin{cases}
+    1/M & \textrm{for} \; 0 \leqslant n < M \\
+    0 & \textrm{otherwise}
+  \end{cases}
+$$
+
+\subsection{MA: analysis}
+\begin{itemize}
+  \item smoothing effect proportional to $M$
+  \item number of operations and storage also proportional to $M$
+\end{itemize}
+
+\subsection{From the MA to a first-order recursion}
+$$
+  y_M[n] = \frac{1}{M} x[n] + \frac{1}{M} (
+    x[n-1]+x[n-2]+\ldots+x[n-M+1]
+  )
+$$
+
+where $(x[n-1]+x[n-2]+\ldots+x[n-M+1])$ is ``almost'' $y_{M-1}[n-1]$ i.e., moving average over $M-1$ points, delayed by one.
+
+Formally:
+
+$$
+  y_M[n] = \frac{1}{M} \sum_{k=0}^{M-1} x[n-k]
+$$
+
+$$
+  y_M[n-1] = \frac{1}{M} \sum_{k=1}^{M} x[n-k]
+$$
+
+$$
+  y_{M-1}[n] = \frac{1}{M-1} \sum_{k=1}^{M-2} x[n-k]
+$$
+
+$$
+  y_{M-1}[n-1] = \frac{1}{M-1} \sum_{k=1}^{M-1} x[n-k]
+$$
+
+$$
+  \sum_{k=0}^{M-1}x[n-k] = x[n] + \sum_{k=1}^{M-1}x[n-k]
+$$
+
+$$
+  M y_M[n] = x[n] + (M-1)y_{M-1}[n-1]
+$$
+
+$$
+  y_M[n] = \frac{M-1}{M} y_{M-1}[n-1] + \frac{1}{M} x[n]
+$$
+
+$$
+  y_M[n] = \lambda y_{M-1}[n-1] + (1-\lambda)x[n], \quad \lambda = \frac{M-1}{M}
+$$
+
+\subsection{The Leaky Integrator}
+
+\begin{itemize}
+  \item when $M$ is large, $y_{M-1}[n] \approx y_M[n]$ (and $\lambda \approx 1$)
+  \item try the filter
+  $$
+    y[n] = \lambda y[n-1] + (1-\lambda)x[n]
+  $$
+  \item filter is now recursive, since it uses its previous output value
+\end{itemize}
+
+\subsection{What about the impulse response?}
+
+$$
+  y[n] = \lambda y[n-1] + (1-\lambda)\delta[n]
+$$
+
+\begin{itemize}
+  \item $y[n] = 0$ for all $n<0$
+  \item $y[0] = \lambda y[-1] + (1-\lambda)\delta[0] = (1-\lambda)$
+  \item $y[1] = \lambda y[0] + (1-\lambda)\delta[1] = \lambda(1-\lambda)$
+  \item $y[2] = \lambda y[1] + (1-\lambda)\delta[2] = \lambda^2(1-\lambda)$
+  \item $y[3] = \lambda y[2] + (1-\lambda)\delta[3] = \lambda^3(1-\lambda)$
+  \item $\ldots$
+\end{itemize}
+
+\textbf{Impulse response:}
+$$
+  h[n] = (1-\lambda)\lambda^n u[n]
+$$
+
+<<m5.2-impulse-response, echo=TRUE>>=
+lambda <- 0.9
+n <- -10:30
+h <- c(rep(0, 10), (1-lambda)*lambda^(0:30))
+dsplot(n, h, xlab="n", ylab="h[n]")
+@
+
+\subsection{Leaky Integrator: why the name}
+
+Discrete-time integrator is a boundless accumulator:
+
+$$
+  y[n] = \sum_{k=-\infty}^{n} x[k]
+$$
+
+We can rewrite the integrator as
+
+$$
+  y[n] = y[n-1] + x[n]
+$$
+
+To prevent ``explosion'' pick $\lambda < 1$
+
+$$
+  y[n] = \lambda y[n-1] + (1+\lambda)x[n]
+$$
+
+\begin{itemize}
+  \item $\lambda y[n-1]$: keep only a fraction $\lambda$ of the accumulated value so far and forget (``leak'') a fraction $1-\lambda$
+  \item $(1+\lambda)x[n]$: add only a fraction $1-\lambda$ of the current value to the accumulator
+\end{itemize}
+
+\section{Filter stability}
+
+\subsection{Filter types according to impulse response}
+\begin{itemize}
+  \item Finite Impulse Response (FIR)
+  \item Infinite Impulse Response (IIR)
+  \item causal
+  \item noncausal
+\end{itemize}
+
+\subsection{FIR}
+\begin{itemize}
+  \item impulse response has finite support
+  \item only a finite number of samples are involved in the computation of each output sample
+\end{itemize}
+
+\textbf{An example:} Moving Average filter
+
+<<m5.3-fir, echo=TRUE>>=
+M <- 8
+n <- -30:30
+x <- ifelse(n >= 0 & n < M, 1/M, 0)
+dsplot(n, x)
+@
+
+\subsection{IIR}
+\begin{itemize}
+  \item impulse response has infinite support
+  \item a potentially infinite number of samples are involved in the computation of each output sample
+  \item surprisingly, in many cases the computation can still be performed in a finite amount of steps
+\end{itemize}
+
+\textbf{An example}: Leaky Integrator
+
+<<m5.3-iir, echo=TRUE>>=
+lambda <- 0.9
+n <- -10:30
+h <- c(rep(0, 10), (1-lambda)*lambda^(0:30))
+dsplot(n, h, xlab="n", ylab="h[n]")
+@
+
+\subsection{Causal vs Noncausal}
+\begin{itemize}
+  \item causal:
+    \begin{itemize}
+      \item impulse response is zero for $n<0$
+      \item only past samples (with respect to the present) are involved in the computation of each output sample
+      \item causal filters can work ``on line'' since they only need the past
+    \end{itemize}
+  \item noncausal:
+    \begin{itemize}
+      \item impulse response is nonzero for some (or all) $n<0$
+      \item can still be implemented in a offline fashion (when all input data is available on storage, e.g. in Image Processing)
+    \end{itemize}
+\end{itemize}
+
+\subsection{Stability}
+\begin{itemize}
+  \item key concept: avoid ``explosions'' if the input is nice
+  \item a nice signal is a bounded signal: $|x[n]| < M$ for all $n$
+  \item Bounded-Input Bounded-Output (BIBO) stability: if the input is nice the output should be nice
+\end{itemize}
+
+\subsection{Fundamental Stability Theorem}
+A filter is BIBO stable if and only if its impulse response is absolutely summable
+
+\textbf{Proof $\Rightarrow$}
+
+Hypotheses: $|x[n]| < M$ and $\sum_n |h[n]| = L < \infty$
+
+Thesis: $|y[n]|$ bounded
+
+Proof:
+
+$$
+|y[n]| = \Big| \sum_{k=-\infty}^{\infty} h[k]x[n-k] \Big| \leqslant
+\sum_{k=-\infty}^{\infty} |h[k]x[n-k]| \leqslant
+M \sum_{k=-\infty}^{\infty} |h[k]| \leqslant
+ML
+$$
+
+\textbf{Proof $\Leftarrow$}
+
+Hypotheses: $|x[n]| < M$ and $|y[n]| < P$
+
+Thesis: $h[n]$ absolutely summable
+
+Proof (by contradiction):
+\begin{itemize}
+  \item assume $\sum_n |h[n]|=\infty$
+  \item build $x[n] = \begin{cases}
+  +1 & \textrm{if} h[-n] \geqslant 0 \\
+  -1 & \textrm{if} h[-n] < 0
+  \end{cases}$
+  \item clearly, $x[n]$ is bounded
+  \item however
+  $$
+    y[0] = (x*h)[0] = 
+    \sum_{k=-\infty}^{\infty} h[k]x[-k] = 
+    \sum_{k=-\infty}^{\infty} |h[k]| = 
+    \infty
+  $$
+\end{itemize}
+
+\textbf{The good news}: FIR filters are always stable
+
+\subsection{Checking the stability of IIRs}
+
+Let's check the Leaky Integrator:
+
+$$
+  \sum_{n=-\infty}{\infty} |h[n]| = 
+  |1-\lambda| \sum_{n=0}^{\infty} |\lambda|^n =
+  \lim_{n\to\infty} |1-\lambda|\frac{1-|\lambda|^{n+1}}{1-|\lambda|} <
+  \infty \; \textrm{for} \; |\lambda| < 1
+$$
+
+stability is guaranteed for $|\lambda| < 1$.
+
+We will study indirect methods for filter stability later in this Module.
+
 \appendix
 \renewcommand{\chaptername}{Appendix}
 \makeatletter
