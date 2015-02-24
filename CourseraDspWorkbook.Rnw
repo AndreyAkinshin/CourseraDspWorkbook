@@ -1382,6 +1382,297 @@ stability is guaranteed for $|\lambda| < 1$.
 
 We will study indirect methods for filter stability later in this Module.
 
+\section{Frequency response}
+
+\subsection{A remarkable result}
+$$
+  e^{j\omega_0 n} \quad \longmapsto \quad \boxed{\mathcal{H}} \quad \longmapsto \quad ?
+$$
+
+$$
+  y[n] = 
+  e^{j\omega_0 n} * h[n] =
+  h[n] * e^{j\omega_0 n} =
+  \sum_{k=-\infty}^{\infty} h[k] e^{j\omega_0 (n-k)}=
+  e^{j\omega_0 n} \sum_{k=-\infty}^{\infty} h[k] e^{-j\omega_0 k} =
+  H(e^{j\omega_0})e^{j\omega_0 n}
+$$
+
+$$
+  e^{j\omega_0 n} 
+  \quad \longmapsto \quad 
+  \boxed{\mathcal{H}} 
+  \quad \longmapsto \quad 
+  H(e^{j\omega_0})e^{j\omega_0 n}
+$$
+
+\begin{itemize}
+  \item complex exponentials are \textit{eigensequences} of LTI systems, i.e., linear filters cannot change the frequency of sinusoids
+  \item DTFT of impulse response determines the frequency characteristic of a filter
+\end{itemize}
+
+\subsection{Magnitude and phase}
+
+if $H(e^{j\omega_0}) = A e^{j\theta}$, then $\mathcal{H} \{ e^{j\omega_0 n} \} = A e^{j (\omega_0 n + \theta)}$
+
+Amplitude: amplification ($A>1$) or attenuation ($0 \leqslant A < 1$).
+
+Phase shift: delay ($\theta < 0$) or advancement ($\theta > 0$).
+
+\subsection{The convolution theorem}
+
+In general:
+
+$$
+  DTFT \{ x[n] * h[n] \} = ?
+$$
+
+Intuition: the DTFT reconstruction formula tells us how to build $x[n]$ from a set of complex exponential ``basis'' functions. By linearity $x(e^{j\omega})e^{j\omega n} \longmapsto x(e^{j\omega})H(e^{j\omega})e^{j\omega n}$.
+
+$$
+\begin{array}{c}
+  DTFT \{ x[n] * h[n] \} =
+  \sum_{n=-\infty}^{\infty} (x*h)[n] e^{-j\omega n} =
+  \sum_{n=-\infty}^{\infty} \sum_{k=-\infty}^{\infty} x[k] h[n-k] e^{-j\omega n} = \\
+  \sum_{n=-\infty}^{\infty} \sum_{k=-\infty}^{\infty} x[k] h[n-k] e^{-j\omega (n-k)} e^{-j\omega k}=
+  \sum_{k=-\infty}^{\infty} x[k] e^{-j\omega k} \sum_{n=-\infty}^{\infty} h[n-k] e^{-j\omega (n-k)} =
+  H(e^{j\omega}) X(e^{j\omega})
+\end{array}
+$$
+
+\subsection{Frequency response}
+$$
+  H(e^{j\omega}) = DTFT \{ h[n] \}
+$$
+
+Two effects:
+\begin{itemize}
+  \item \textbf{magnitude}: amplification ($|H(e^{j\omega})| > 1$) or attenuation ($|H(e^{j\omega})|<1$) of input frequencies
+  \item \textbf{phase}: overall daly and shape changes
+\end{itemize}
+
+\subsection{Moving Average revisited}
+$$
+  h[n] = (u[n] - u[n-M]) / M
+$$
+
+$$
+  |H(e^{j\omega})| = \frac{1}{M} \Big| \frac{\sin{(\frac{\omega}{2}M)}}{\sin{(\frac{\omega}{2})}} \Big|
+$$
+
+\subsection{What about the phase?}
+
+Assume $|H(e^{j\omega})|=1$
+\begin{itemize}
+  \item zero phase: $\angle H(e^{j\omega})=0$
+  \item linear phase: $\angle H(e^{j\omega})=d \omega$
+  \item nonlinear phase
+\end{itemize}
+
+\subsection{Linear phase}
+
+$$
+  x[n] \quad \longmapsto \quad \boxed{\mathcal{D}} \quad \longmapsto \quad x[n-d]
+$$
+
+\begin{itemize}
+  \item $y[n]=x[n-d]$
+  \item $Y(e^{j\omega})=e^{-j\omega d}X(e^{j\omega})$
+  \item $H(e^{j\omega})=e^{-j\omega d}$
+  \item linear phase term
+\end{itemize}
+
+\section{Ideal filters}
+
+\subsection{Filter types according to magnitude response}
+\begin{itemize}
+  \item Lowpass
+  \item Highpass
+  \item Bandpass
+  \item Allpass
+\end{itemize}
+
+Moving Average and Leaky Integrator are lowpass filters.
+
+\subsection{Filter types according to phase response}
+\begin{itemize}
+  \item Linear phase
+  \item Nonlinear phase
+\end{itemize}
+
+\subsection{Ideal lowpass filter}
+
+$$
+H(e^{j\omega}) = \begin{cases}
+1 & \textrm{for} |\omega| \leqslant \omega_c \\
+0 & \textrm{otherwise}
+\end{cases}
+$$
+
+\begin{itemize}
+  \item perfectly flat passband
+  \item infinite attenuation in stopband
+  \item zero-phase (no delay)
+\end{itemize}
+
+\textbf{Impulse response}
+
+$$
+h[n] = IDTFT \{ H(e^{j\omega}) \} =
+\frac{1}{2\pi} \int_{-\pi}^{\pi} H(e^{j\omega n} d \omega) =
+\frac{1}{2\pi} \int_{-\omega_c}^{\omega_c} e^{j\omega n} d \omega =
+\frac{1}{\pi n} \frac{e^{j\omega_c n} - e^{-j\omega_c n}}{2j} =
+\frac{\sin \omega_c n}{\pi n}
+$$
+
+<<m5.5-iir, echo=TRUE>>=
+wc <- 0.7
+n <- seq(-25, 25, by=0.6)
+h <- sin(wc*n)/(pi*n)
+dsplot(n, h)
+@
+
+\textbf{The bad news:}
+
+\begin{itemize}
+  \item impulse response is infinite support, two sided: cannot compute the output in a finite amount of time; that's why it's called ``ideal''.
+  \item impulse response decays slowly in time: we need a lot of samples for a good approximation.
+\end{itemize}
+
+\textbf{The sinc-rect pair:}
+
+$$
+\textrm{rect}(x) = \begin{cases}
+1 & |x| \leqslant 1/2 \\
+0 & |x| > 1/2
+\end{cases}
+$$
+
+$$
+\textrm{sinc}(x) = \begin{cases}
+\frac{\sin \pi x}{\pi x} & x \neq 0 \\
+1 & x = 0
+\end{cases}
+$$
+
+(note that $\textrm{sinc}=0$ when $x$ is a nonzero integer)
+
+\textbf{The ideal lowpass in canonical form}
+
+$$
+ \textrm{rect} \Big( \frac{\omega}{2\omega_c} \Big) 
+ \leftrightarrow
+ \frac{\omega_c}{\pi} \textrm{sinc} \Big( \frac{\omega_c}{\pi} n \Big)
+ \quad\quad
+ (DTFT)
+$$
+
+\textbf{Little-known fact}
+
+\begin{itemize}
+  \item the sinc is not absolutely summable
+  \item the ideal lowpass is not BIBO stable!
+  \item example for $\omega_c = \pi/3$: $h[n] = (1/3)\textrm{sinc}(n/3)$
+  \item take $x[n] = \textrm{sign} \{ \textrm{sinc} (-n/3) \}$ and
+  $$
+    y[0] = (x*h)[0] = \frac{1}{3} \sum_{k=-\infty}^{\infty} |\textrm{sinc}(k/3)| = \infty
+  $$
+\end{itemize}
+
+\subsection{Ideal highpass filter}
+
+$$
+H_{hp}(e^{h\omega}) = \begin{cases}
+  1 & \textrm{for} \; \pi \geqslant |\omega| \geqslant \omega_c \\
+  0 & \textrm{otherwise}
+\end{cases}
+$$
+
+$$
+  H_{hp}(e^{j\omega}) = 1 - H_{lp}(e^{j\omega})
+$$
+
+$$
+  h_{hp}[n] = \delta[n] - \frac{\omega_c}{\pi} \textrm{sinc} \Big( \frac{\omega_c}{\pi} n \Big)
+$$
+
+\subsection{IDeal bandpass filter}
+
+$$
+  H_{bp}(e^{j\omega}) = \begin{cases}
+    1 & \textrm{for} \; |\omega\pm \omega_0| \leqslant \omega_c \\
+    0 & \textrm{otherwise}
+  \end{cases}
+$$
+
+$$
+  h_{bp} [n] = 2 \cos(\omega_0 n) \frac{\omega_c}{\pi} \textrm{sinc} \Big( \frac{\omega_c}{\pi} n \Big)
+$$
+
+\subsection{Demodulation revisited}
+
+\begin{itemize}
+  \item apply sinusoidal modulation to $x[n]: y[n] = x[n] \cos \omega_0 n$
+  \item demodulate by multiplying by the carrier $x'[n] = y[n] \cos \omega_0 n$
+  \item demodulated signal contains unwanted high-frequency components
+\end{itemize}
+
+\section{Filter design}
+
+\subsection{How can we approximate an ideal lowpass?}
+
+Idea \#1:
+\begin{itemize}
+  \item pick $\omega_c$
+  \item compute ideal impulse response $h[n]$
+  \item truncate $h[n]$ to a finite-support $\hat{h}[n]$
+  \item $\hat{h}[n]$ defines an FIR filter
+\end{itemize}
+
+\textbf{Approximation by truncation}
+
+FIR approximation of length $M=2N+1$ :
+
+$$
+\hat{h}[n] = \begin{cases}
+  \frac{\omega_c}{\pi} \textrm{sinc} \Big( \frac{\omega_c}{\pi} n \Big) & |n| \leqslant N \\
+  0 & \textrm{otherwise}
+\end{cases}
+$$
+
+Why it could be a good idea:
+
+$$
+MSE = \frac{1}{2\pi} \int_{-\pi}^{\pi} |H(e^{j\omega}) - \hat{H}(e^{j\omega})|^2 d\omega =
+||H(e^{j\omega}) - \hat{H}(e^{j\omega})||^2 =
+||h[n] - \hat{h}[n]||^2 = 
+\sum_{n=-\infty}^{\infty} |h[n] - \hat{h}[n]|^2
+$$
+
+MSE is minimized by symmetric impulse truncation around zero.
+
+\textbf{What if we change the window?}
+
+We want:
+
+\begin{itemize}
+  \item narrow mainlobe so that transition is sharp
+  \item small sidelobe so Gibbs error is small
+  \item short window so FIR is efficient
+\end{itemize}
+
+very conflicting requirements!
+
+\subsection{Frequency sampling}
+
+Idea \#2:
+\begin{itemize}
+  \item draw desired frequency response $H(e^{j\omega})$
+  \item take $M$ values at $\omega_k = (2\pi / M)k$
+  \item compute IDFT of values
+  \item use result as an $M$-tap impulse response $\hat{h}[n]$
+\end{itemize}
+
 \appendix
 \renewcommand{\chaptername}{Appendix}
 \makeatletter
