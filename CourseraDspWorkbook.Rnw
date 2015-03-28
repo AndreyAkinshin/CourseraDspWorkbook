@@ -1673,6 +1673,1251 @@ Idea \#2:
   \item use result as an $M$-tap impulse response $\hat{h}[n]$
 \end{itemize}
 
+\newpage
+
+\section{Realizable filters}
+
+\subsection{The most general LTI systems}
+
+\begin{itemize}
+	\item ideal filters cannot be implemented
+	\item what is the most general, realizable LTI transformation?
+	\begin{itemize}
+		\item linearity: only sums and multiplications
+		\item time-invariance: only multiplications by constants
+		\item realizability: only finite number of past and future samples
+	\end{itemize}
+\end{itemize}
+
+\subsection{Constant-Coefficient Difference Equation}
+
+$$
+\sum_{k=0}^{N-1} a_k y[n-k] = 
+\sum_{k=0}^{M-1} b_k x[n-k]
+$$
+
+\begin{itemize}
+	\item uses $M$ input and $N$ output values
+	\item how do we compute the frequency response?
+	\item we need a new tool!
+\end{itemize}
+
+\subsection{The z-transform}
+
+$$
+  X(z) = \sum_{-\infty}^{\infty} x[n] z^{-n}, \quad z \in \mathbb{C}
+$$
+
+\begin{itemize}
+  \item think of it as a formal operator...
+  \item ... or as the extension of the DTFT to the whole complex plane:
+  $$
+    X(z)|_{z=e^{j\omega}} = DTFT \{ x[n] \}
+  $$
+\end{itemize}
+
+Linearity:
+
+$$
+  \mathcal{Z} \{ \alpha x[n] + \beta y[n] \} =
+  \alpha X(z) + \beta Y(z)
+$$
+
+Time shift:
+
+$$
+  \mathcal{Z} \{ x[n - N] \} =
+  z^{-N} X(z)
+$$
+
+\subsection{Applying the z-transform to CCDE's}
+
+$$
+\sum_{k=0}^{N-1} a_k y[n-k] = 
+\sum_{k=0}^{M-1} b_k x[n-k]
+$$
+
+$$
+Y(z) \sum_{k=0}^{N-1} a_k z^{-k} = 
+X(z) \sum_{k=0}^{M-1} b_k z^{-k}
+$$
+
+$$
+Y(z) = H(z) X(z)
+$$
+
+Rational Transfer Function:
+
+$$
+H(z) = \dfrac{\sum_{k=0}^{M-1} b_k z^{-k}}{\sum_{k=0}^{N-1} a_k z^{-k}}
+$$
+
+by setting $z=e^{j\omega}$ we have the frequency response! (and now the notation $X(e^{j\omega})$ should make more sense).
+
+\subsection{Leaky Integrator revisited}
+
+$$
+y[n] = (1 - \lambda) x[n] + \lambda y[n-1]
+$$
+
+$$
+Y(z) = (1 - \lambda) X(z) + \lambda z^{-1} Y(z)
+$$
+
+$$
+H(z) = \frac{1-\lambda}{1 - \lambda z^{-1}}
+$$
+
+$$
+H(e^{j\omega}) = \frac{1-\lambda}{1 - \lambda e^{-j\omega}}
+$$
+
+\subsection{Region of convergence (ROC)}
+
+the z-tranform is a power series, so convergence is always absolute
+
+$$
+|X(z)| < \infty \Longleftrightarrow \sum_{n=\infty}^{\infty} |x[n]z^{-n}| < \infty
+$$
+
+\begin{itemize}
+  \item ROC is whole complex plane for finite-support sequences
+  \item ROC has circular symmetry (depends only on |z|)
+  \item ROC of causal sequences extends from a circle of infinity
+\end{itemize}
+
+ROC for causal systems:
+
+\begin{itemize}
+  \item $z_n$'s zeros of the transfer function
+  \item $p_n$'s poles of the transfer function
+  \item only trouble spots for ROC are the poles
+\end{itemize}
+
+\section{Implementation of digital filters}
+
+\subsection{Leaky integrator}
+
+<<m5.8-leaky, echo=TRUE>>=
+lambda <- 0.95
+y <- 0
+leaky <- function(x) {
+  y <<- lambda * y + (1 - lambda) * x
+  y
+}
+for (i in 0:19) {
+  cat(sprintf("%.4f\n", leaky(ifelse(i == 0, 1.0, 0.0))))
+}
+@
+
+Key points:
+
+\begin{itemize}
+  \item we need a ``memory cell'' to store previous output
+  \item we need to initialize the storage before first use
+  \item we need 2 multiplications and one addition per output sample
+\end{itemize}
+
+Better implementation:
+
+<<m5.8-leaky2, echo=TRUE>>=
+leaky <- function(lambda, x) {
+	y <- 0
+	res <- c()
+	for (v in x) {
+		y <- lambda * y + (1 - lambda) * v
+		res <- c(res, y)
+	}
+	res
+}
+y <- leaky(0.95, c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+y
+dsplot(-4:6, y)
+@
+
+\subsection{Moving average}
+
+$$
+  y[n] = \frac{1}{M} \sum_{k=0}^{M-1} x[n-k]
+$$
+
+Key point:
+
+\begin{itemize}
+  \item we now need $M$ memory cells to store previous input values
+  \item we need to initialize the storage before first use
+  \item we need $1$ division and $M$ additions per output sample
+\end{itemize}
+
+Implementation:
+
+<<m5.8-moving-average, echo=TRUE>>=
+movingAverage <- function(M, x) {
+  z <- rep(0, M)
+  ix <- 0
+  res <- c()
+  for (v in x) {
+    z[ix] <- v
+    ix <- (ix + 1) %% M
+    avg <- mean(z)
+    res <- c(res, avg / M)
+  }
+  res
+}
+y <- movingAverage(10, rep(1, 20))
+y
+dsplot(0:19, y)
+@
+
+\section{Filter design --- Part 2: Intuitive Filters}
+
+\subsection{Simple lowpass}
+
+\begin{itemize}
+  \item let only low frequencies pass
+  \item used to remove high frequency components (e.g. noise)
+  \item useful in audio, communication, control systems
+  \item we know a simple answer: leaky integrator
+\end{itemize}
+
+\subsection{Leaky Integrator}
+
+$$
+H(z) = \frac{1-\lambda}{1 - \lambda z^{-1}}
+$$
+
+$$
+y[n] = (1-\lambda) x[n] + \lambda y[n-1]
+$$
+
+\subsection{Resonator}
+
+\begin{itemize}
+  \item a resonator is a narrow bandpass filter
+  \item used to detect the presence of a sinusoid of a given frequency
+  \item useful in communication systems and telephony (DTMF)
+  \item idea: shift the passband of the Leaky Integrator!
+\end{itemize}
+
+$$
+  H(z) = \frac{G_0}{(1-pz^{-1})(1-p^*z^{-1})}, \; p = \lambda e^{j\omega_0}
+$$
+
+$$
+  y[n] = G_0 x[n] - a_1 y[n-1] - a_2 y[n-2]
+$$
+
+Canonical form:
+
+$$
+H(z) = \frac{G_0}{1-2\lambda \cos \omega_0 z^{-1} + |\lambda|^2 z^{-2}}
+$$
+$$
+a_1 = 2\lambda \cos \omega_0, \quad a_2 = -|\lambda|^2
+$$
+
+\subsection{DC removal}
+
+\begin{itemize}
+  \item a DC-balanced signal has zero sum:
+  $$
+    \lim_{N \to \infty} \sum_{n=-N}^{N} x[n] = 0
+  $$
+  i.e. there is no Direct Current component
+  \item its DTFT value at zero is zero
+  \item we want to removal the DC bias from a non zero-centered signal
+  \item we want to kill the frequency component at $\omega=0$
+\end{itemize}
+
+Improved version:
+
+$$
+H(z) = \frac{1-z^{-1}}{1-\lambda z^{-1}}
+$$
+
+$$
+y[n] = \lambda y[n-1] + x[n] - x[n-1]
+$$
+
+\subsection{Hum removal}
+
+\begin{itemize}
+  \item similar to DC removal but we want to remove a specific nonzero frequency
+  \item very useful for musicians: amplifiers for electric guitar pick up the hum from the electric mains (50Hz in Eurpoe and 60Hz in North America)
+  \item we need to tune the hum removal according to country
+\end{itemize}
+
+$$
+H(z) = \frac{(1-e^{j\omega_0} z^{-1})(1-e^{-j\omega_0} z^{-1})}{(1-\lambda e^{j\omega_0} z^{-1})(1- \lambda e^{-j\omega_0} z^{-1})}
+$$
+
+\section{Filter design --- Part 3: Design from specs}
+
+\subsection{The filter design problem}
+
+You are given a set of requirements:
+
+\begin{itemize}
+  \item frequency response: passband(s) and stopband(s)
+  \item phase: overall delay, linearity
+  \item some limit on computational resources and/or numerical precision
+\end{itemize}
+
+You must determine $N$, $M$, $a_k$'s and $b_k$'s in
+
+$$
+H(z) = \frac{b_0 + b_1 z^{-1} + \ldots + b_{M-1} z^{-(M-1)}}{a_0 + a_1 z^{-1} + \ldots + a_{M-1} z^{-(M-1)}}
+$$
+
+in order to best fulfill the requirements.
+
+\subsection{Practical limitations}
+
+\begin{itemize}
+  \item passband/stopband transitions cannot be infinitely sharp => use transition bands
+  \item magnitude response cannot be constant over an interval
+  \item in general:
+    \begin{itemize}
+    	\item small transition bands => hight filter order
+    	\item small error tolerance => higher filter order
+    	\item higher filter order => more expensive, larger delay
+    \end{itemize}
+\end{itemize}
+
+\section{Real-time processing}
+
+Everything works in sync with a system clock of period $T_s$:
+\begin{itemize}
+  \item ``record'' a value $x_i[n]$
+  \item process the value in a causal filter
+  \item ``play'' the output $x_0[n]$
+\end{itemize}
+everything needs to happen in a t most $T_s$ seconds!
+
+
+\subsection{Buffering}
+
+\begin{itemize}
+  \item interrupt for each sample would be too much overhead
+  \item soundcard consumes sample in buffers
+  \item soundcard notifies when buffer used up
+  \item CPU can fill a buffer in less time than soundcard can empty it
+\end{itemize}
+
+buffering introduces delay!
+
+
+\section{Dereverbation and echo cancelation}
+
+\subsection{Sound Propagation}
+
+\begin{itemize}
+  \item Free space propagation, sound pressure $\approx \frac{1}{\textrm{distance}}$
+  \item Every reflection attenuates the sound by $\alpha \in [0,1]$
+  \item Room is a linear filter, it acts by convolution
+  \item $y_{\textrm{listener}}[n] = x_{\textrm{source}}[n] * h[n; positions]$
+  \item We will supress the dependence on source and listener positions for simplicity
+\end{itemize}
+
+\newpage
+\chapter{Interpolation and Sampling}
+
+\section{The continuous-time paradigm}
+
+\subsection{Digital processing of signals from/to the analog world}
+
+\begin{itemize}
+  \item input in continuous-time: $x(t)$
+  \item ouptut is continuous-time: $y(t)$
+  \item processing is on sequences: $x[n], \, y[n]$
+\end{itemize}
+
+Examples: MP3, digital photography.
+
+\subsection{Two views of the world}
+
+Digital worldview:
+
+\begin{itemize}
+  \item arithmetic
+  \item combinatorics
+  \item computer science
+  \item DSP
+\end{itemize}
+
+Analog worldview:
+
+\begin{itemize}
+  \item calculus
+  \item distributions
+  \item system theory
+  \item electronics
+\end{itemize}
+
+Digital worldview:
+
+\begin{itemize}
+  \item countable integer index $n$
+  \item sequences $x[n] \in l_2 (\mathbb{Z})$
+  \item frequency $\omega \in [-\pi, \pi]$
+  \item DTFT: $l_2(\mathbb{Z} \mapsto L_2 ([-\pi; \pi])$
+\end{itemize}
+
+Analog worldview:
+
+\begin{itemize}
+  \item real-valued time $t$ (sec)
+  \item functions $x(t) \in L_2(\mathbb{R})$
+  \item frequency $\Omega \in \mathbb{R}$ (rad/sec)
+  \item FT: $L_2(\mathbb{R}) \mapsto L_2(\mathbb{R})$
+\end{itemize}
+
+\subsection{About continuous time}
+
+\begin{itemize}
+  \item time: real variable $t$
+  \item signal $x(t)$: complex functions of a real variable
+  \item finite energy: $x(t) \in L_2(\mathbb{R})$
+  \item inner product in $L_2(\mathbb{R})$
+    $$
+      \langle x(t), y(t) \rangle =
+      \int_{-\infty}^{\infty} x^*(t)y(t)dt
+    $$
+  \item energy: $||x(t)||^2 = \langle x(t), x(t) \rangle$
+\end{itemize}
+
+Analog LTI filters:
+
+$$
+y(t) = 
+(x*h)(t) =
+\langle h^*(t-\tau), x(\tau) \rangle =
+\int_{-\infty}^{\infty} x(\tau)h(t-\tau)d\tau
+$$
+
+\subsection{Fourier analysis}
+\begin{itemize}
+  \item in discrete time max angular frequency is $\pm \pi$
+  \item in continuous no max frequency: $\Omega \in \mathbb{R}$
+  \item concept is the same:
+    $$
+      X(j\Omega) = \int_{-\infty}^{\infty} x(t) e^{-j\Omega t} dt
+    $$
+    $$
+      x(t) = \frac{1}{2\pi} \int_{-\infty}^{\infty} X(j\Omega) e^{j\Omega t} d \Omega
+    $$
+\end{itemize}
+
+\subsection{Real-world frequency}
+
+\begin{itemize}
+  \item $\Omega$ expressed in rad?s
+  \item $F=\frac{\Omega}{2\pi}$, expressed in Hertz (1/s)
+  \item period $T=\frac{1}{F}=\frac{2\pi}{\Omega}$
+\end{itemize}
+
+Example:
+
+$$
+  x(t)=e^{-\frac{t^2}{2\sigma^2}}
+$$
+
+<<m6.1-gauss, echo=TRUE>>=
+sigma <- 3
+t <- seq(-50, 50, by=0.1)
+x <- exp(-(t^2)/(2*sigma^2))
+csplot(t, x)
+@
+
+$$
+  X(j\omega)=\sigma \sqrt{2\pi} e^{-\frac{\sigma^2}{2}\Omega^2}
+$$
+
+<<m6.1-gauss-ft, echo=TRUE>>=
+sigma <- 3
+omega <- seq(-50, 50, by=0.1)
+X <- sigma * sqrt(2*pi) * exp(-(sigma^2)*(omega^2)/2)
+csplot(omega, X)
+@
+
+\subsection{Convolution theorem}
+
+$$
+Y(j\Omega) = X(j\Omega) H(j\Omega)
+$$
+
+\subsection{Bandlimited functions}
+
+$\Omega_N$-bandlimitedness:
+
+$$
+  X(j\Omega) = 0 \quad \textrm{for} \; |\Omega| > \Omega_N
+$$
+
+\subsection{Prototypical bandlimited function}
+
+\begin{itemize}
+  \item normailization: $G=\frac{\pi}{\Omega_N}$
+  \item total bandwidth: $\Omega_B = 2\Omega_N$
+  \item define $T_s = \frac{2\pi}{\Omega_B} = \frac{\pi}{\Omega_N}$
+\end{itemize}
+
+\section{Interpolation}
+
+Main task:
+
+$$
+  x[n] \mapsto x(t)
+$$
+
+``fill the gaps'' between samples
+
+\subsection{Interpolation requirements}
+
+\begin{itemize}
+  \item decide on $T_s$
+  \item make sure $x(nT_s) = x[n]$
+  \item make sure $x(t)$ is smooth
+\end{itemize}
+
+\subsection{Why smoothness}
+
+\begin{itemize}
+  \item jumps (1st order discontinuities) would require the signal to move ``fatser than light''...
+  \item 2nd order discontinuities would require infinite acceleration
+  \item the interpolation should be infinitely differentiable
+  \item ``natual'' solution: polynomial interpolation
+\end{itemize}
+
+\subsection{Polynomial interpolation}
+
+\begin{itemize}
+  \item $N$ points $\mapsto$ polynomial of degree $(N-1)$
+  \item $p(t) = a_0 + a_1 t + a_2 t^2 + \ldtos + a_{N-1} t^{N-1}$
+  \item ``native'' approach:
+  $$
+    \left\{
+      \begin{array}{rcl}
+        p(0) & = & x[0] \\
+        p(T_s) & = & x[1] \\
+        p(2T_s) & = & x[2] \\
+        & \ldots & \\
+        p((N-1)T_s) & = & x[N-1]
+      \end{array}
+    \right.
+  $$
+\end{itemize}
+
+Without loss of generality:
+
+\begin{itemize}
+  \item consider a symmetric interval $l_N = [-N,\ldots,N]$
+  \item set $T_s=1$:
+  $$
+  \left\{
+    \begin{array}{rcl}
+      p(-N) & = & x[-N] \\
+      p(-N+1) & = & x[-N+1] \\
+      & \ldots & \\
+      p(0) & = & x[0] \\
+      & \ldots & \\
+      p(N) & = & x[N]
+    \end{array}
+  \right.
+  $$
+\end{itemize}
+
+\subsection{Lagrange interpolation}
+
+\begin{itemize}
+  \item $P_N$: space of degree-$2N$ polynomials over $l_N$
+  \item a basis for $P_N$ is the family of $2N+1$ Lagrange polynomials
+  $$
+    L_n^{(N)} (t) = \prod_{k=-N, k\neq n}^N \frac{t-k}{n-k}, \quad
+    n = -N, \ldots, N
+  $$
+\end{itemize}
+
+The formula:
+
+$$
+  p(t) = \sum_{n=-N}^{N} x[n] L_n^{(N)} (t)
+$$
+
+\subsection{Local interpolation schemes}
+
+$$
+x(t) = \sum_{n=-N}^{N} x[n] i_c(t-n)
+$$
+
+Interpolator's requirements:
+
+\begin{itemize}
+  \item $i_c(0) = 1$
+  \item $i_c(t) = 0$ for $t$ a nonzero integer
+\end{itemize}
+
+Key property: same interpolating function independently of $N$.
+
+Drawback: lack of smoothness.
+
+\subsection{Sinc interpolation formula}
+
+$$
+  x(t) = \sum_{n=-\infty}^{\infty} x[n] sinc \Big( \frac{t-nT_s}{T_s} \Big)
+$$
+
+\section{The space of bandlimited signals}
+
+\subsection{Spectral representation}
+
+$$
+  X(j\Omega) = \begin{cases}
+    (\pi/\Omega_N)X(e^{j\pi(\Omega-\Omega_N)} & \textrm{for} \; |\Omega| \leqslant |\Omega_N| \\
+    0 & \textrm{otherwise}
+  \end{cases}
+$$
+
+\subsection{The space of $\pi$-Bl functions}
+
+Inner product:
+
+$$
+\langle x(t), y(t) \rangle = \int_{-\infty}^{\infty} x^*(t) y(t) dt
+$$
+
+Convolution:
+$$
+  (x*y)(t) = \langle x^*(\tau), y(t-\tau) \rangle
+$$
+
+A basis for the $\pi$-BL space:
+
+$$
+\phi^{(n)}(t) = \textrm{sinc} (t-n), \quad n \in \mathbb{Z}
+$$
+
+$$
+\textrm{FT} \{ \textrm{sinc}(t) \} = \textrm{rect} \Big( \frac{\Omega}{2\pi} \Big)
+$$
+
+$$
+(\textrm{sinc}*\textrm{sinc})(m-n) = \begin{cases}
+  1 & \textrm{for} m=n \\
+  0 & \textrm{otherwise}
+\end{cases}
+$$
+
+$$
+x(t) = \frac{1}{T_s} \sum_{n=-\infty}^{\infty} x[n] \textrm{sinc}
+\Big( \frac{t-nT_s}{T_s} \Big)
+$$
+
+\section{Sampling and aliasing: Introduction}
+
+\subsection{Sinc sampling}
+
+$$
+x[n] = (\textrm{sinc}_{T_s} *x)(nT_s)
+$$
+
+\subsection{Raw sampling}
+
+$$
+x[n] = x(nT_s)
+$$
+
+\subsection{The continuous-time complex exponential}
+
+$$
+x(t) = e^{j\Omega_0 t}
+$$
+
+
+\section{Sampling and aliasing}
+
+\subsection{Spectrum of raw-sampled signals}
+
+Start with the inverse Fourier Transform:
+
+$$
+x[n] = x_c(nT_s) = 
+\frac{1}{2\pi} \int_{-\infty}^{\infty} X_c(j\Omega) e^{j\Omega n T_s} d\Omega
+$$
+
+frequencies $2\Omega_N$ apart will be aliased, so split the integration interval:
+
+$$
+x[n] = \frac{1}{2\pi} \sum_{k=\infty}^{\infty} \int_{(2-k-1)\Omega_N}^{(2k+1)\Omega_N}
+X_c(j\Omega) e^{j\Omega n T_s} d\Omega
+$$
+
+\section{Descrete-time processing of continuous-time signals}
+
+\chapter{Stochastic Signal Processing and Quantization}
+
+\section{Stochastic signal processing}
+
+\subsection{Deterministic vs. stochastic}
+\begin{itemize}
+  \item deterministic signals are known in advance: $x[n] = \sin(0.2 n)$
+  \item interesting signals are not known in advance: $s[n] = $ what I'm going to say next
+  \item we usually know something, though: $s[n]$ is a speech signal
+  \item stochastic signals can be described probabilistically
+  \item can we do signal processing with random signals? Yes!
+  \item will not develop stochastic signal processing rigorously but give enough intuition to deal with things such as ``noise''
+\end{itemize}
+
+\subsection{A simple discrete-time random signal generator}
+
+For each new sample, toss a fair coin:
+$$
+x[n] = \begin{cases}
+  +1 & \textrm{if the outcome of the n-th toss is head} \\
+  -1 & \textrm{if the outcome of the n-th toss is tail}
+\end{cases}
+$$
+
+\begin{itemize}
+  \item each sample is independent from all others
+  \item each sample value has a $50\%$ probability
+  \item every time we turn on the generator we obtain a different realization of the signal
+  \item we know the ``mechanism'' behind each instance
+  \item but how can we analyze a random signal?
+\end{itemize}
+
+<<m7.1-random, echo=TRUE>>=
+t <- 0:31
+for (seed in 1:3) {
+  set.seed(seed)
+  x <- sample(c(-1, 1),32,replace=T)
+  print(dsplot(t, x))
+}
+@
+
+\subsection{Spectral properties?}
+
+\begin{itemize}
+  \item let's try with the DFT of a finite set of random samples
+  \item every time it's different; maybe with more data?
+  \item no clear pattern... we need a new strategy
+\end{itemize}
+
+<<m7.1-random-dft, echo=TRUE>>=
+for (seed in 1:3) {
+  set.seed(seed)
+  x <- sample(c(-1, 1),32,replace=T)
+  dftplot(x)
+}
+set.seed(4)
+x <- sample(c(-1, 1),128,replace=T)
+dftplot(x)
+@
+
+\subsection{Averaging}
+
+\begin{itemize}
+  \item when faced with random data an intuitive response is to take ``averages''
+  \item in probability theory the average is across realizations and it's called expectation
+  \item for the coin-toss signal:
+  $$
+    E[x[n]] = -1 \cdot P[\textrm{n-th toss is tail}] + 1 \cdot P[\textrm{n-th toss is head}] = 0
+  $$
+  \item so the average value for each sample is zero
+\end{itemize}
+
+\textbf{Averaging the DFT}
+
+\begin{itemize}
+  \item ... as a consequence, averaging the DFT will not work
+  \item $E[X[k]]=0$
+  \item however the signal ``moves'', so its energy or power must be nonzero
+\end{itemize}
+
+\textbf{Energy and power}
+
+\begin{itemize}
+  \item the coin-toss signal has infinite energy (see Module 2.1):
+  $$
+    E_x = 
+    \lim_{N \to \infty} \sum_{n=-N}^{N} |x[n]|^2 = 
+    \lim_{N \to \infty} (2N+1) =
+    \infty
+  $$
+  \item however it has finite power over any interval:
+  $$
+    P_x =
+    \lim_{N \to \infty} \frac{1}{2N+1} \sum_{n=-N}^{N} |x[n]|^2 =
+    1
+  $$
+\end{itemize}
+
+\textbf{Averaging}
+
+let's try to average the DFT's square magnitude, normalized:
+\begin{itemize}
+  \item pick an interval length $N$
+  \item pick a number of iterations $M$
+  \item run the signal generator $M$ times and obtain $M$ $N$-point realizations
+  \item compute the DFT of each realization
+  \item average their square magnitude divided by $N$
+\end{itemize}
+
+\subsection{Power spectral density}
+
+$$
+  P[k] = E[|X_n[k]|^2/N|
+$$
+
+\begin{itemize}
+  \item it looks very much as if $P[k] = 1$
+  \item if $|X_N[k]|^2$ tends to the energy distribution in frequency...
+  \item ... $|X_N[k]|^2/N$ tends to the power distribution (aka density) in frequency
+  \item the frequency-domain representation for stochastic processes is the power spectral density
+\end{itemize}
+
+\textbf{Power spectral density: intuition}
+
+\begin{itemize}
+  \item $P[k]=1$ means that the power is equally distributed over all frequencies
+  \item i.e., we cannot predict if the signal moves ``slowly'' or ``super-fast''
+  \item this is because each sample is independent of each other: we could have a realization of all ones or a realization in which the sign changes every other samples or anything in between
+\end{itemize}
+
+\subsection{Filtering a random process}
+
+\begin{itemize}
+  \item let's filter the random process with a 2-point Moving Average filter
+  \item $y[n] = (x[n] + x[n-1])/2$
+  \item what is the power spectral density?
+  \item it looks like $P_y[k] = P_x[k] |H[k]|^2$, where $H[k] = DFT\{ h[n] \}$
+  \item can we generalize these results beyond a finite set of samples?
+\end{itemize}
+
+\subsection{Stochastic signal processing}
+
+\begin{itemize}
+ \item a stochastic process is characterized by its power spectral density (PSD)
+ \item is can be shown (see the textbook) that the PSD is
+ $$
+   P_x(e^{j\omega}) = DTFT \{ r_x[n] \}
+ $$
+ where $r_x[n] = E[x[k] x[n+k]]$ is the autocorrelation of the process.
+ \item for a filtered stochastic process $y[n] = \mathcal{H} \{ x[n]\}$, it is:
+ $$
+   P_y (e^{j\omega}) = |H(e^{j\omega})|^2 P_x(e^{j\omega})
+ $$
+\end{itemize}
+
+\textbf{Key points:}
+
+\begin{itemize}
+  \item filters designed for deterministic signals still work (in magnitude) in the stochastic case
+  \item we lose the concept of phase since we don't know the shape of a realization in advance
+\end{itemize}
+
+\subsection{Noise}
+\begin{itemize}
+  \item noise is everywhere:
+    \begin{itemize}
+      \item thermal noise
+      \item sum of extraneous interferences
+      \item quantization and numerical errors
+      \item ...
+    \end{itemize}
+  \item we can model noise as a stochastic signal
+  \item the most important noise is white noise
+\end{itemize}
+
+\textbf{White noise}
+
+\begin{itemize}
+  \item ``white'' indicates uncorrelated samples
+  \item $r_w[n] = \sigma^2 \delta[n]$
+  \item $P_w(e^{j\omega}) = \sigma^2$
+  \item the PSD is independent of the probability distribution of the single samples (depends only on the variance)
+  \item distribution is important to estimate bounds for the signal
+  \item very often a Gaussian distribution models the experimental data the best
+  \item AWGN: additive white Gaussian noise
+\end{itemize}
+
+\section{Quantization}
+
+\begin{itemize}
+  \item digital devices can only deal with integers ($b$ bits per sample)
+  \item we need to map the range of a signal onto a finite set of values
+  \item irreversible loss of information $\to$ quantization noise
+\end{itemize}
+
+Several factors at play:
+\begin{itemize}
+  \item storage budget (bits per sample)
+  \item storage scheme (fixed point, floating point)
+  \item properties of the input: range and probability distribution
+\end{itemize}
+
+\subsection{Scalar quantization}
+
+The simplest quantizer:
+\begin{itemize}
+  \item each sample is encoded individually (hence scalar)
+  \item each sample is quantized independently (memoryless quantization)
+  \item each sample is encoded using $R$ bits
+\end{itemize}
+
+Assume input signal bounded: $A \leqslant x[n] \leqslant B$ for all $n$:
+\begin{itemize}
+  \item each sample quantized over $2^R$ possible values => $2^R$ intervals.
+  \item each interval associated to a quantization value
+\end{itemize}
+
+\subsection{Quantization Error}
+
+$$
+  e[n] = \mathcal{Q} \{ x[n] \} - x[n] = \hat x[n] - x[n]
+$$
+
+\begin{itemize}
+  \item model $x[n]$ as a stochastic process
+  \item model error as a white noise sequence: error samples are uncorrelated and all erorr samples have the same distribution
+  \item we need statistics of the input to study the error
+\end{itemize}
+
+\subsection{Uniform quantization}
+
+\begin{itemize}
+  \item simple but very general case
+  \item range is split into $2^R$ equal intervals of width $\Delta = (B-A)2^{-R}$
+\end{itemize}
+
+Mean Square Error is the variance of the error signal:
+
+$$
+  \sigma_e^2 = 
+  E[|\mathcal{Q} \{ x[n] \} - x[n]|^2] =
+  \int_A^B f_x(\tau) (\mathcal{Q} \{ \tau \} - \tau)^2 d\tau =
+  \sum_{k=0}^{2^R-1} \int_{l_k} f_x(\tau) (\hat x_k - \tau)^2 d\tau
+$$
+error depends on the probability distribution of the input
+
+\subsection{Uniform quantization of uniform input}
+
+Uniform-input hypothesis:
+
+$$
+f_x(\tau) = \frac{1}{B-A}
+$$
+
+$$
+\sigma_e^2 = \sum_{k=0}^{2^R-1} \int_{l_k} \frac{(\hat x_k - \tau)^2}{B-A} d\tau
+$$
+
+Let's find the optimal quantization point by minimizing the error:
+
+$$
+\frac{d\sigma_e^2}{d\hat{x}_m} = \frac{(\hat{x}_m - \tau)^2}{B-A} \Big|_{A+m\Delta}^{A+m\Delta+\Delta}
+$$
+
+Minimizing the error:
+
+$$
+\frac{d\sigma_e^2}{d\hat{x}_m} = 0 \quad \textrm{for} \quad \hat{x}_m = A + m\Delta + \Delta/2
+$$
+
+optimal quantization point is the interval's midpoint, for all intervals.
+
+Quantizer's mean square error:
+
+$$
+\sigma_e^2 = \frac{\Delta}{12}
+$$
+
+\subsection{Error analysis}
+\begin{itemize}
+  \item Error energy: $\sigma_e^2 = \Delta^2/12, \quad \Delta=(B-A)/2^R$
+  \item Signal energy: $\sigma_x^2 = (B-A)^2/12$
+  \item Signal to noise ration: $\textrm{SNR} = 2^{2R}$
+  \item in dB: $\textrm{SNR}_{dB} = 10 \log_{10} 2^{2R} \approx 6R\; dB$
+\end{itemize}
+
+\subsection{The ``6dB/bit'' rule of thumb}
+
+\begin{itemize}
+  \item a compact disk has 16 bits/sample: max SNR = 96dB
+  \item a DVD has 24 bits/sample: max SNR = 144dB
+\end{itemize}
+
+\subsection{Other quantization errors}
+
+If input is not uniform:
+
+\begin{itemize}
+  \item use uniform quantizer and accept increased error. For instance, if input is Gaussian:
+  $$
+    \sigma_e^2 = \frac{\sqrt{3} \pi}{2} \sigma^2 \Delta^2
+  $$
+  \item design optimal quantizer for input distribution, in known (Lloyd-Max algorithm)
+  \item use ``companders''
+\end{itemize}
+
+\section{A/D and D/A conversion}
+
+\chapter{Image Processing}
+
+\section{Image Processing}
+
+\subsection{Digital images}
+
+\begin{itemize}
+  \item two-dimensional signal $x[n_1, n_2], n_1, n_2 \in \mathbb{Z}$
+  \item indices locate a point on a grid $\mapsto$ pixel
+  \item grid is usually regularly spaced
+  \item values $x[n_1, n_2]$ refer to the pixel's appearance
+\end{itemize}
+
+\subsection{Digital images: grayscale vs color}
+
+\begin{itemize}
+  \item grayscale images: scalar pixel values
+  \item color images: multidimensional pixel values in a color space (RGB, HSV, YUV, etc)
+  \item we can consider the single components separately
+\end{itemize}
+
+\subsection{Image processing}
+
+From one to two dimensions...
+
+\begin{itemize}
+  \item something still works
+  \item something breaks down
+  \item something is new
+\end{itemize}
+
+What works:
+
+\begin{itemize}
+  \item linearity, convolution
+  \item Fourier transform
+  \item interpolation, sampling
+\end{itemize}
+
+What breaks down:
+
+\begin{itemize}
+  \item Fourier analysis less relevant
+  \item filter design hard, IIRs rare
+  \item linear operators only mildly useful
+\end{itemize}
+
+What's new:
+
+\begin{itemize}
+  \item new manipulations: affine transforms
+  \item images are finite-support signals
+  \item images are (most often) available in their entirety $\mapsto$ causality meaning
+  \item images are very specialized signals, designed for a very specific processing system i.e. the human brain! Lots os semantics that is extermely hard to deal with
+\end{itemize}
+
+\subsection{Digital signal processing: the basics}
+
+A two-dimensional descrete-space signal:  $x[n_1, n_2], \quad n_1, n_2 \in \mathbb{Z}$
+
+\begin{itemize}
+  \item just show coordinates of nonzero samples
+  \item aplitude may be written along explicitly
+  \item example:
+  $$
+    \delta[n_1, n_2] = \begin{cases}
+      1 & \textrm{if}\; n_1=n_2=0 \\
+      0 & \textrm{otherwise}
+    \end{cases}
+  $$
+  \item medium has a certain dynamic range (paper, screen)
+  \item image values are quantized (usually to 8 bits, or 256 levels)
+  \item the eye does interpolation in space provided the pixel density in high enough
+\end{itemize}
+
+\subsection{Why 2D?}
+
+\begin{itemize}
+  \item images could be unrolled (printers, fax)
+  \item but what amount spatial correlation?
+\end{itemize}
+
+\subsection{Separable signals}
+
+$$
+  x[n_1, n_2] = x_1[n_1]x_2[n_2]
+$$
+
+\subsection{Nonseparable signals}
+
+Example:
+
+$$
+x[n_1, n_2] = \begin{cases}
+  1 & \textrm{if}\; |n_1|+|n_2| < N \\
+  0 & \textrm{otherwise}
+\end{cases}
+$$
+
+\subsection{2D convolution for separable signals}
+
+if $h[n_1, n_2]$ is $M_1 \times M_2$ finite-support signal:
+\begin{itemize}
+  \item non-separable convolution: $M_1M_2$ operations per output sample
+  \item separable convolution: $M_1+M_2$ operations per output sample!
+\end{itemize}
+
+\section{Image manipulations}
+
+\subsection{Affine transforms}
+
+Mapping $\mathbb{R}^2 \mapsto \mathbb{R}^2$ that reshapes the coordinate system:
+
+$$
+\begin{bmatrix}
+  t_1' \\ t_2'
+\end{bmatrix} =
+\begin{bmatrix}
+  a_{11} & a_{12} \\
+  a_{2_1} & a_{22}
+\end{bmatrix}
+\begin{bmatrix}
+  t_1 \\ t_2
+\end{bmatrix} -
+\begin{bmatrix}
+  d_1 \\ d_2
+\end{bmatrix}
+$$
+
+$$
+\begin{bmatrix}
+  t_1' \\ t_2'
+\end{bmatrix} =
+A
+\begin{bmatrix}
+t_1 \\ t_2
+\end{bmatrix} -
+d
+$$
+
+\subsection{Translation}
+
+$$
+A = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix} = I, \quad d = \begin{bmatrix} d_1 \\ d_2 \end{bmatrix}
+$$
+
+\subsection{Scaling}
+
+$$
+A = \begin{bmatrix} a_1 & 0 \\ 0 & a_2 \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+\subsection{Rotation}
+
+$$
+A = \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+\subsection{Flips}
+
+Horizontal:
+
+$$
+A = \begin{bmatrix} -1 & 0 \\ 0 & 1 \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+Vertical:
+
+$$
+A = \begin{bmatrix} 1 & 0 \\ 0 & -1 \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+\subsection{Shear}
+
+Horizontal:
+
+$$
+A = \begin{bmatrix} 1 & s \\ 0 & 1 \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+Vertical:
+
+$$
+A = \begin{bmatrix} 1 & 0 \\ s & 1 \end{bmatrix} = I, \quad d = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+$$
+
+\subsection{Interpolation}
+
+\begin{itemize}
+  \item apply the inverse transform:
+  $$
+    \begin{bmatrix} t_1 \\ t_2 \end{bmatrix} =
+    A^{-1}
+    \begin{bmatrix} m_1+d_1 \\ m_2+d_2 \end{bmatrix}
+  $$
+  \item interpolate from the original grid point to the ``mid-point''
+  $$
+    (t_1, t_2) = (\eta_1 + \tau_1, \eta_2 + \tau_2), \quad \eta_{1,2} \in \mathbb{Z}, \quad 0 \leqslant \tau_{1,2} < 1
+  $$
+\end{itemize}
+
+\subsection{Bilinear interpolation}
+
+$$
+  \begin{array}{rcl}
+    y[m_1, m_2] &=& (1-\tau_1)(1-\tau_2) x[\eta_1, \eta_2] + \\
+    ~&~&\tau_1(1-\tau_2) x[\eta_1+1, \eta_2]+ \\
+    ~&~&(1-\tau_1) \tau_2 x[\eta_1, \eta_2+1] + \\
+    ~&~&\tau_1 \tau_2 x[\eta_1 + 1, \eta_2 + 1]
+  \end{array}
+$$
+
+\section{Frequency analisys}
+
+\section{Image filtering}
+
+\subsection{Analogies with 1D filters}
+\begin{itemize}
+  \item linearity
+  \item space invariance
+  \item impulse response
+  \item frequency response
+  \item stability
+  \item 2D CCDE
+\end{itemize}
+
+\subsection{Filters}
+\begin{itemize}
+  \item Moving Average
+  \item Gaussian Blur
+  \item Sobel filter
+  \item Laplician operator
+\end{itemize}
+
+\section{Image compression}
+
+\subsection{Key ingredients}
+
+\begin{itemize}
+  \item compressing at block level
+  \item using a suitable transform (i.e., a change of basis)
+  \item smart quantization
+  \item entropy coding
+\end{itemize}
+
+\section{The JPEG compression algorithm}
+
+\subsection{Key ingredients}
+
+\begin{itemize}
+	\item split image into 8x8 non-overlapping blocks
+	\item compute the DCT of each block
+	\item quantize DCT coefficients according to psycovisually-tuned tables
+	\item run-length encoding and Huffman coding
+\end{itemize}
+
 \appendix
 \renewcommand{\chaptername}{Appendix}
 \makeatletter
